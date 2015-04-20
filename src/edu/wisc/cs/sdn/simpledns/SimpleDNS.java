@@ -21,7 +21,8 @@ import edu.wisc.cs.sdn.simpledns.packet.DNSResourceRecord;
  */
 public class SimpleDNS 
 {
-	private final static int dnsPort = 8053;
+	private final static int dnsListenPort = 8053;
+	private final static int dnsSendPort = 53;
 	private static DatagramSocket dnsSocket;
 	private static InetAddress selfAddress;
 	private static InetAddress rootServerAddress;
@@ -44,16 +45,23 @@ public class SimpleDNS
 		// Set the flags
 		setDNSRequestFlags(newDNSQueryPacket);
 		
-		//Put the DNS Data into the Datagram Packet
+		// Put the DNS Data into the Datagram Packet
 		byte []dnsData = newDNSQueryPacket.serialize();
 		
-		newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsPort);
+		newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsSendPort);
+		
+		System.out.println("\nSending the packet: "+newDNSQueryPacket.toString());
+		
+		/*queryPacket.setPort(dnsSendPort);
+		queryPacket.setAddress(rootServerAddress);*/
 		
 		dnsSocket.send(newQueryPacket);
 		
 		receivePacket = new DatagramPacket(receiveData,receiveData.length);
 		
 		dnsSocket.receive(receivePacket);
+		
+		System.out.println("\nReceived the packet");
 		
 		return receivePacket;
 		
@@ -108,7 +116,7 @@ public class SimpleDNS
 		// Put the DNS Data into the Datagram Packet
 		byte []dnsData = dnsQueryPacket.serialize();
 		
-		newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsPort);
+		newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsListenPort);
 		
 		dnsSocket.send(newQueryPacket);
 		
@@ -169,7 +177,7 @@ public class SimpleDNS
 				dnsQueryPacket.setQuestions(dnsRequestPacket.getQuestions());
 				
 				// Form the Datagram Packet and send
-				newQueryPacket = new DatagramPacket(dnsData,dnsData.length,nextNSAddress,dnsPort);
+				newQueryPacket = new DatagramPacket(dnsData,dnsData.length,nextNSAddress,dnsListenPort);
 				dnsSocket.send(newQueryPacket);
 			}
 			else{
@@ -200,7 +208,7 @@ public class SimpleDNS
 					dnsQueryPacket.setQuestions(newQuestionList);
 					
 					// Form the Datagram Packet and send to root server
-					newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsPort);
+					newQueryPacket = new DatagramPacket(dnsData,dnsData.length,rootServerAddress,dnsListenPort);
 					dnsSocket.send(newQueryPacket);
 					
 				}
@@ -234,9 +242,10 @@ public class SimpleDNS
 	
 	public static void main(String[] args)
 	{
-		if(args.length != 4 || !args[0].equals("-r") || !args[0].equals("-e")){
+		if(args.length != 4 || !args[0].equals("-r") || !args[2].equals("-e")){
 			System.out.println("\nIncorrect format\nExpected: " +
 					"java edu.wisc.cs.sdn.simpledns.SimpleDNS -r <root server ip> -e <ec2 csv>");
+			System.out.println(args[0]);
 			System.exit(0);
 		}
 		
@@ -244,7 +253,8 @@ public class SimpleDNS
 		
 		try{
 			
-			dnsSocket = new DatagramSocket(dnsPort);
+			dnsSocket = new DatagramSocket(dnsListenPort);
+			
 			selfAddress = InetAddress.getByName("localhost");
 			rootServerAddress = InetAddress.getByName(args[1]);
 			firstQueryPacket = new DatagramPacket(firstQueryData, firstQueryData.length);
@@ -252,6 +262,7 @@ public class SimpleDNS
 			dnsSocket.receive(firstQueryPacket);
 			
 			DNS dnsRequestPacket = DNS.deserialize(firstQueryPacket.getData(), (short)firstQueryPacket.getLength());
+			System.out.println("\nReceived the dns:\n"+dnsRequestPacket.toString());
 			
 			// Check for flags
 			if(dnsRequestPacket.getOpcode() != (byte)0){
@@ -277,13 +288,25 @@ public class SimpleDNS
 			}
 			
 			if(dnsRequestPacket.isRecursionDesired()){
+				System.out.println("\nRecursively Resolve");
 				replyPacket = recursivelyResolve(firstQueryPacket, dnsRequestPacket);
 			}
 			else{
+				System.out.println("\nNon Recursively Resolve");
 				replyPacket = nonrecursivelyResolve(firstQueryPacket, dnsRequestPacket);
 			}
-			replyPacket.setPort(dnsPort);
+			
+			DNS dnsAnsPacket = DNS.deserialize(replyPacket.getData(), (short)replyPacket.getLength());
+			
+			dnsAnsPacket.setId(dnsRequestPacket.getId());
+			
+			replyPacket.setData(dnsAnsPacket.serialize());
+			
+			System.out.println("\nThe received packet = "+dnsAnsPacket.toString());
+			
+			replyPacket.setPort(firstQueryPacket.getPort());
 			replyPacket.setAddress(firstQueryPacket.getAddress());
+			
 			dnsSocket.send(replyPacket);
 		}
 		catch(Exception e){
