@@ -127,6 +127,9 @@ public class DNSResourceRecord
 		case DNS.TYPE_EC2:
 			strType = "EC2";
 			break;
+		case DNS.TYPE_TXT:
+			strType = "TXT";
+			break;
 		default:
 			strType = String.format("Unknown (%d)", this.type);
 			break;

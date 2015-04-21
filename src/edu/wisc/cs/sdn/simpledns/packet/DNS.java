@@ -10,6 +10,7 @@ public class DNS
 	public static final short TYPE_A = 1;
 	public static final short TYPE_NS = 2;
 	public static final short TYPE_CNAME = 5;
+	public static final short TYPE_TXT = 16;
 	public static final short TYPE_AAAA = 28;
 	public static final short TYPE_CDN = 258;
 	public static final short TYPE_EC2 = 259;
@@ -352,6 +353,22 @@ public class DNS
 				bb.put((byte)(label.length()));
 				bb.put(label.getBytes(StandardCharsets.US_ASCII));
 			}
+		}
+		bb.put((byte)0);
+		
+		return data;
+	}
+	
+	public static byte[] serializeText(String text)
+	{
+		byte[] data = new byte[text.length()+3];
+		ByteBuffer bb = ByteBuffer.wrap(data);
+		
+		if (text.length() > 0){
+			
+		bb.put((byte)(text.length()));
+		bb.put(text.getBytes());
+			
 		}
 		bb.put((byte)0);
 		
