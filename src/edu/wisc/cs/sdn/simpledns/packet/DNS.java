@@ -361,16 +361,15 @@ public class DNS
 	
 	public static byte[] serializeText(String text)
 	{
-		byte[] data = new byte[text.length()+3];
+		byte[] data = new byte[text.length()+ 1];
 		ByteBuffer bb = ByteBuffer.wrap(data);
 		
 		if (text.length() > 0){
 			
 		bb.put((byte)(text.length()));
-		bb.put(text.getBytes());
+		bb.put(text.getBytes(StandardCharsets.US_ASCII));
 			
 		}
-		bb.put((byte)0);
 		
 		return data;
 	}

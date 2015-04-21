@@ -63,6 +63,8 @@ public class SimpleDNS
 		
 		DNS dnsQueryPacket,dnsReceivePacket;
 		List<DNSResourceRecord> cnameList = new ArrayList<DNSResourceRecord>();
+		List<DNSResourceRecord> lastAuthList = new ArrayList<DNSResourceRecord>();
+		List<DNSResourceRecord> lastAddList = new ArrayList<DNSResourceRecord>();
 		
 		boolean resolved = false;
 		byte[] receiveData = new byte[4096];
@@ -79,13 +81,47 @@ public class SimpleDNS
 			// Check if the data received has an answer or should be resolved
 			dnsReceivePacket = DNS.deserialize(receivePacket.getData(),receivePacket.getData().length);
 			
-			System.out.println("\nReceived DNS Packet:\n"+dnsReceivePacket.toString());
+			//System.out.println("\nReceived DNS Packet:\n"+dnsReceivePacket.toString());
+			
+			List<DNSResourceRecord> authorityList = dnsReceivePacket.getAuthorities();
+			List<DNSResourceRecord> additionalList = dnsReceivePacket.getAdditional();
+			
+			/*
+			 * Find if the authority section and additional section contains data
+			 */
+			if(authorityList.size()>0){
+				boolean listContainsNonSOA = false;
+				for(int i=0; i<authorityList.size(); i++){
+					if(authorityList.get(i).getType() == DNS.TYPE_A){
+						listContainsNonSOA = true;
+						break;
+					}
+					else if(authorityList.get(i).getType() == DNS.TYPE_AAAA){
+						listContainsNonSOA = true;
+						break;
+					}
+					else if(authorityList.get(i).getType() == DNS.TYPE_NS){
+						listContainsNonSOA = true;
+						break;
+					}
+					else if(authorityList.get(i).getType() == DNS.TYPE_CNAME){
+						listContainsNonSOA = true;
+						break;
+					}
+					else{
+						
+					}
+				}
+				if(listContainsNonSOA)
+					lastAuthList = authorityList;
+			}
+			if(additionalList.size()>0){
+				lastAddList = additionalList;
+			}
 			
 			if(dnsReceivePacket.getAnswers().size()==0){
 				
 				// No answers - check the authority section and get the next NS INET Address
-				List<DNSResourceRecord> authorityList = dnsReceivePacket.getAuthorities();
-				List<DNSResourceRecord> additionalList = dnsReceivePacket.getAdditional();
 				InetAddress nextNSAddress = null;
 				
 				DNSResourceRecord authRR = null, addRR = null;
@@ -100,10 +136,10 @@ public class SimpleDNS
 						addRR = additionalList.get(j);
 						DNSRdataName nsName = (DNSRdataName)authRR.getData();
 						
-						System.out.println("\nName of NS server = "+nsName.getName());
+						//System.out.println("\nName of NS server = "+nsName.getName());
 						
 						if(authRR.getType() == DNS.TYPE_NS && (addRR.getName().equals(nsName.getName()))
-								&& (addRR.getType() == DNS.TYPE_A || addRR.getType() == DNS.TYPE_AAAA)){
+								&& (addRR.getType() == DNS.TYPE_A /*|| addRR.getType() == DNS.TYPE_AAAA*/)){
 							// Match the name server with an IP address
 							matchFound = true;
 							break;
@@ -127,6 +163,10 @@ public class SimpleDNS
 					List<DNSResourceRecord> finalAnswerList = dnsReceivePacket.getAnswers();
 					List<DNSResourceRecord> finalAuthList = dnsReceivePacket.getAuthorities();
 					List<DNSResourceRecord> finalAddList = dnsReceivePacket.getAdditional();
+					
+					/*
+					 * Find if the authority section and additional section contains data
+					 */
 					
 					// Add any CNAME that was resolved
 					for(int i=0; i<cnameList.size(); i++){
@@ -168,8 +208,16 @@ public class SimpleDNS
 						}
 					}
 					
-					finalDNSPacket.setAuthorities(authorityList);
-					finalDNSPacket.setAdditional(additionalList);
+					if(finalAuthList.size() == 0){
+						finalAuthList = lastAuthList;
+					}
+					if(finalAddList.size() == 0){
+						finalAddList = lastAddList;
+					}
+					
+					finalDNSPacket.setAuthorities(finalAuthList);
+					finalDNSPacket.setAdditional(finalAddList);
+					
 					setDNSReplyFlags(finalDNSPacket);
 					finalDNSPacket.setId(dnsRequestPacket.getId());
 					
@@ -189,6 +237,8 @@ public class SimpleDNS
 				answer = answerList.get(0);
 				
 				if(answer.getType() == DNS.TYPE_CNAME){
+					
+					//System.out.println("\nResolving CNAME");
 					
 					// CNAME is received, resolve again looking at authority section
 					cnameList.add(answer);
@@ -231,6 +281,17 @@ public class SimpleDNS
 					// Add any CNAME that was resolved
 					for(int i=0; i<cnameList.size(); i++){
 						finalAnswerList.add(0, cnameList.get(i));
+					}
+					
+					/*
+					 * Check if the packet contains authority and additional section
+					 */
+					if(dnsReceivePacket.getAuthorities().size()==0){
+						dnsReceivePacket.setAuthorities(lastAuthList);
+					}
+					
+					if(dnsReceivePacket.getAdditional().size()==0){
+						dnsReceivePacket.setAdditional(lastAddList);
 					}
 					
 					// Set the new answers
@@ -307,7 +368,7 @@ public class SimpleDNS
 				
 				if(isMatch(ansip.toString(),me.getKey(),netmaskList.get(j))){
 					
-					System.out.println("\nMatch found");
+					//System.out.println("\nMatch found");
 					
 					// Found Match
 					// Add a TXT DNSResourceRecord to answerList
@@ -321,7 +382,7 @@ public class SimpleDNS
 					
 					dnsrr.setData(dnsrdatatext);
 					
-					System.out.println("\n Text record: "+dnsrr.toString());
+					//System.out.println("\n Text record: "+dnsrr.toString());
 					
 					answerList.add(dnsrr);
 					
@@ -454,11 +515,11 @@ public class SimpleDNS
 				}
 				
 				if(dnsRequestPacket.isRecursionDesired()){
-					System.out.println("\nRecursively Resolve");
+					//System.out.println("\nRecursively Resolve");
 					replyPacket = recursivelyResolve(firstQueryPacket, dnsRequestPacket);
 				}
 				else{
-					System.out.println("\nNon Recursively Resolve");
+					//System.out.println("\nNon Recursively Resolve");
 					replyPacket = nonrecursivelyResolve(firstQueryPacket, dnsRequestPacket);
 				}
 				

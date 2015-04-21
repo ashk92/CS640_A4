@@ -27,7 +27,7 @@ public class DNSRdataText implements DNSRdata
 	{ return DNS.serializeText(this.text); }
 	
 	public int getLength()
-	{ return this.text.length();}
+	{ return this.text.length() + 1;}
 	
 	public String toString()
 	{ return this.text; }
